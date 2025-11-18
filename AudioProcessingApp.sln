@@ -21,6 +21,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решен
 	ProjectSection(SolutionItems) = preProject
 		.env = .env
 		docker-compose.yml = docker-compose.yml
+		ml-service\app\Dockerfile = ml-service\app\Dockerfile
+		ml-service\app\main.py = ml-service\app\main.py
+		ml-service\app\requirements.txt = ml-service\app\requirements.txt
 	EndProjectSection
 EndProject
 Global

@@ -1,5 +1,9 @@
+fastapi
+uvicorn[standard]
 torch
-torchaudio
-grpcio
-grpcio-tools
-requests
+numpy
+librosa
+soundfile
+matplotlib
+kafka-python
+python-dotenv

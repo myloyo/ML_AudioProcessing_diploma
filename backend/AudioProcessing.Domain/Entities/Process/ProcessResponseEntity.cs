@@ -1,5 +1,5 @@
 ﻿namespace AudioProcessing.Domain.Entities.Process;
 
-public class ProcessResponse
+public class ProcessResponseEntity
 {
 }

@@ -34,7 +34,6 @@ services:
     networks:
       - audio_net
 
-
   ml-service:
     build:
       context: ./ml-service/app
@@ -44,12 +43,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - backend
+      - kafka
+      - minio
     networks:
       - audio_net
     ports:
-      - "50051:50051"  
-
+      - "8000:8000"
+    volumes:
+      - ./ml-service/app:/app
 
   postgres:
     image: postgres:15

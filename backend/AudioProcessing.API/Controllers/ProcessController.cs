@@ -16,7 +16,7 @@ public class ProcessController(IProducer<Null, string> producer, AppDbContext db
     private readonly MinioService _minio = minio;
 
     [HttpPost]
-    public async Task<IActionResult> StartProcess([FromBody] ProcessRequest req)
+    public async Task<IActionResult> StartProcess([FromBody] ProcessRequestEntity req)
     {
         Track track = await _db.Tracks.FindAsync(req.TrackId);
         if (track == null) return NotFound();

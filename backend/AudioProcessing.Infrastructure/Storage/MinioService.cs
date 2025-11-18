@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Options;
 using Minio;
 using Minio.DataModel.Args;
+using System.Threading;
 
 namespace AudioProcessing.Infrastructure.Storage;
 
@@ -61,4 +62,15 @@ public class MinioService
 
         return _client.PresignedGetObjectAsync(args).GetAwaiter().GetResult();
     }
+
+    public string PresignedPutObject(string objectName, int expirySeconds = 3600)
+    {
+        var args = new Minio.DataModel.Args.PresignedPutObjectArgs()
+            .WithBucket(_bucket)
+            .WithObject(objectName)
+            .WithExpiry(expirySeconds);
+
+        return _client.PresignedPutObjectAsync(args).GetAwaiter().GetResult();
+    }
+
 }

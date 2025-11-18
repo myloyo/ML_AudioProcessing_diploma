@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AudioProcessing.Domain.Entities.Process;
 
-public class ProcessRequest
+public class ProcessRequestEntity
 {
     [Key]
     [Column("process_request_id")]
