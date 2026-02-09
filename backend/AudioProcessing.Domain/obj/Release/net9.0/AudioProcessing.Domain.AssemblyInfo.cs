@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AudioProcessing.Domain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ec4e337d868263060dff0510ca4ac5ab00c8e466")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+340c1558383de0b36121b6726d6ec4e27376ef45")]
 [assembly: System.Reflection.AssemblyProductAttribute("AudioProcessing.Domain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AudioProcessing.Domain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

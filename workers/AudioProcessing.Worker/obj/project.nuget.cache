@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "IZqcd2+STzQ=",
+  "dgSpecHash": "15QMmbOVI6Y=",
   "success": true,
   "projectFilePath": "C:\\Users\\nikiv\\Desktop\\MyProj\\audioProcessing\\workers\\AudioProcessing.Worker\\AudioProcessing.Worker.csproj",
   "expectedPackageFiles": [
@@ -10,11 +10,11 @@
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.entityframeworkcore\\9.0.10\\microsoft.entityframeworkcore.9.0.10.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.entityframeworkcore.abstractions\\9.0.10\\microsoft.entityframeworkcore.abstractions.9.0.10.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.entityframeworkcore.analyzers\\9.0.10\\microsoft.entityframeworkcore.analyzers.9.0.10.nupkg.sha512",
-    "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.entityframeworkcore.relational\\9.0.1\\microsoft.entityframeworkcore.relational.9.0.1.nupkg.sha512",
+    "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.entityframeworkcore.relational\\9.0.10\\microsoft.entityframeworkcore.relational.9.0.10.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.caching.abstractions\\9.0.10\\microsoft.extensions.caching.abstractions.9.0.10.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.caching.memory\\9.0.10\\microsoft.extensions.caching.memory.9.0.10.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.configuration\\9.0.8\\microsoft.extensions.configuration.9.0.8.nupkg.sha512",
-    "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\9.0.8\\microsoft.extensions.configuration.abstractions.9.0.8.nupkg.sha512",
+    "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\9.0.10\\microsoft.extensions.configuration.abstractions.9.0.10.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.configuration.binder\\9.0.8\\microsoft.extensions.configuration.binder.9.0.8.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.configuration.commandline\\9.0.8\\microsoft.extensions.configuration.commandline.9.0.8.nupkg.sha512",
     "C:\\Users\\nikiv\\.nuget\\packages\\microsoft.extensions.configuration.environmentvariables\\9.0.8\\microsoft.extensions.configuration.environmentvariables.9.0.8.nupkg.sha512",
