@@ -1,11 +1,11 @@
 ﻿using AudioProcessing.Infrastructure.Context;
 using AudioProcessing.Infrastructure.Storage;
-using AudioProcessing.Domain.Entities.Process;
 using AudioProcessing.Domain.Entities.Track;
 using AudioProcessing.Domain.Entities.Job;
 using Confluent.Kafka;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using AudioProcessing.Domain.DTOs.Process;
 
 namespace AudioProcessing.API.Controllers;
 
@@ -15,7 +15,6 @@ public class ProcessController(IProducer<Null, string> producer, AppDbContext db
 {
     private readonly IProducer<Null, string> _producer = producer;
     private readonly AppDbContext _db = db;
-    private readonly MinioService _minio = minio;
 
     /// <summary>
     /// Принимает параметры (fileKey, genre, instrument), создаёт запись Job в БД и публикует сообщение в Kafka
@@ -23,7 +22,7 @@ public class ProcessController(IProducer<Null, string> producer, AppDbContext db
     /// <param name="req"></param>
     /// <returns></returns>
     [HttpPost]
-    public async Task<IActionResult> StartProcess([FromBody] ProcessRequestEntity req)
+    public async Task<IActionResult> StartProcess([FromBody] ProcessRequestDto req)
     {
         TrackEntity track = await _db.Tracks.FindAsync(req.TrackId);
         if (track == null) return NotFound();

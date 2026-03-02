@@ -73,4 +73,20 @@ public class MinioService
         return _client.PresignedPutObjectAsync(args).GetAwaiter().GetResult();
     }
 
+    public async Task<bool> ObjectExistsAsync(string objectName)
+    {
+        try
+        {
+            await _client.StatObjectAsync(
+                new StatObjectArgs()
+                    .WithBucket(_bucket)
+                    .WithObject(objectName)
+            );
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

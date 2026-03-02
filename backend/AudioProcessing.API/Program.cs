@@ -74,6 +74,7 @@ using (var scope = app.Services.CreateScope())
     {
         var db = sp.GetRequiredService<AppDbContext>();
         db.Database.Migrate();
+        Debug.WriteLine($"Database migration completed successfully.");
     }
     catch (Exception ex)
     {
@@ -86,6 +87,7 @@ using (var scope = app.Services.CreateScope())
     {
         var minioService = sp.GetRequiredService<MinioService>();
         await minioService.EnsureBucketExistsAsync();
+        Debug.WriteLine($"MinIO initialization completed successfully.");
     }
     catch (Exception ex)
     {
