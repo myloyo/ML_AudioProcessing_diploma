@@ -1,5 +1,4 @@
-﻿
-namespace AudioProcessing.Domain.Entities.Track;
+﻿namespace AudioProcessing.Domain.DTOs.TracksController;
 
 public class CreateTrackRequest
 {

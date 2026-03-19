@@ -1,8 +1,8 @@
-﻿using AudioProcessing.Domain.Entities.Track;
-using AudioProcessing.Infrastructure.Context;
+﻿using AudioProcessing.Domain.DTOs.TracksController;
+using AudioProcessing.Domain.Entities.Track;
+using AudioProcessing.Infrastructure.Repositories;
 using AudioProcessing.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace AudioProcessing.API.Controllers;
 
@@ -10,13 +10,15 @@ namespace AudioProcessing.API.Controllers;
 [Route("api/tracks")]
 public class TracksController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly TracksRepository _tracksRepository;
     private readonly MinioService _minio;
+    private readonly ILogger _logger;   
 
-    public TracksController(AppDbContext db, MinioService minio)
+    public TracksController(TracksRepository tracksRepository, MinioService minio, ILogger<TracksController> logger)
     {
-        _db = db;
+        _tracksRepository = tracksRepository;
         _minio = minio;
+        _logger = logger;
     }
 
     /// <summary>
@@ -25,27 +27,34 @@ public class TracksController : ControllerBase
     /// <param name="req"></param>
     /// <returns></returns>
     [HttpPost]
-    public async Task<IActionResult> CreateTrack([FromBody] CreateTrackRequest req)
+    public async Task<IActionResult> CreateTrack([FromBody] CreateTrackRequest req, CancellationToken ct)
     {
+        _logger.LogInformation("TracksController поступил POST запрос для Filename {filename}", req.Filename);
         // проверяем полученные данные
         if (string.IsNullOrWhiteSpace(req.Filename) || string.IsNullOrWhiteSpace(req.StorageKey))
         {
-            return BadRequest(new { message = "Filename and StorageKey are required" });
+            string exception = "Filename and StorageKey are required";
+            _logger.LogInformation("TracksController ошибка 400 для Filename {filename}: {exception}", req.Filename, exception);
+            return BadRequest(new { message = exception });
         }
 
         // проверяем существует ли файл в minio
-        bool exists = await _minio.ObjectExistsAsync(req.StorageKey);
+        bool exists = await _minio.ObjectExistsAsync(req.StorageKey, ct);
         if (!exists)
         {
-            return BadRequest("File not found in storage");
+            string exception = "File not found in storage";
+            _logger.LogInformation("TracksController ошибка 400 для Filename {filename}: {exception}", req.Filename, exception);
+            return BadRequest(exception);
         }
 
         // Проверяем, не создан ли уже Track
-        bool alreadyExists = await _db.Tracks.AnyAsync(t => t.StorageKey == req.StorageKey);
+        bool alreadyExists = _tracksRepository.ReadList().Any(t => t.StorageKey == req.StorageKey);
 
         if (alreadyExists)
         {
-            return Conflict(new { message = "Track already exists" });
+            string exception = "Track already exists";
+            _logger.LogInformation("TracksController ошибка 409 для Filename {filename}: {exception}", req.Filename, exception);
+            return Conflict(new { message = exception });
         }
 
         var track = new TrackEntity
@@ -56,9 +65,9 @@ public class TracksController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
 
-        _db.Tracks.Add(track);
-        await _db.SaveChangesAsync();
+        await _tracksRepository.Create(track, ct);
 
+        _logger.LogInformation("TracksController трек Filename {filename} успешно записан в БД", req.Filename);
         return CreatedAtAction(
             nameof(GetTrackById),
             new { id = track.TrackId },
@@ -72,12 +81,17 @@ public class TracksController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetTrackById(Guid id)
+    public async Task<IActionResult> GetTrackById(Guid id, CancellationToken ct)
     {
-        var track = await _db.Tracks.FindAsync(id);
+        _logger.LogInformation("TracksController поступил GET запрос для id {id}", id);
+        var track = await _tracksRepository.Read(id, ct);
         if (track == null)
+        {
+            _logger.LogInformation("TracksController ошибка 404 для id {id}", id);
             return NotFound();
+        }
 
+        _logger.LogInformation("TracksController трек с id {id} успешно найден", id);
         return Ok(track);
     }
 }

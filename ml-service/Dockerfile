@@ -10,9 +10,8 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
-# Копируем содержимое app прямо в /app, а не в /app/app
 COPY app/ .
 
 COPY model_weights.pth .

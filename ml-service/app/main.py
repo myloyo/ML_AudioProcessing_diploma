@@ -1,40 +1,143 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI
 import torch
+import json
+import io
+import requests
+from confluent_kafka import Consumer, Producer
+from minio import Minio
 from model import GRUSeparator
 from utils import process_single_file
 
 app = FastAPI(title="ML Audio Processor")
 
+# ---------- CONFIG ----------
+
+KAFKA_BOOTSTRAP = "kafka:9092"
+INPUT_TOPIC = "job.prepared"
+OUTPUT_TOPIC_OK = "job.completed"
+OUTPUT_TOPIC_FAIL = "job.failed"
+
+MINIO_ENDPOINT = "minio:9000"
+MINIO_ACCESS_KEY = "minio"
+MINIO_SECRET_KEY = "minio123"
+BUCKET = "audio-files"
+
+BACKEND_URL = "http://backend:8080/api/jobs"
+
+# ---------- MODEL ----------
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = GRUSeparator().to(device)
+model.load_state_dict(torch.load("model_weights.pth", map_location=device))
+model.eval()
 
-try:
-    model.load_state_dict(torch.load("model_weights.pth", map_location=device))
-    print("Model weights loaded.")
-except FileNotFoundError:
-    print("Model weights not found. Run 'python train_model.py' first.")
+# ---------- MINIO ----------
+
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=False,
+)
+
+# ---------- KAFKA ----------
+
+consumer = Consumer({
+    "bootstrap.servers": KAFKA_BOOTSTRAP,
+    "group.id": "ml-service",
+    "auto.offset.reset": "earliest",
+})
+
+producer = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP})
+
+consumer.subscribe([INPUT_TOPIC])
 
 
-@app.post("/process")
-async def process_audio(file: UploadFile = File(...)):
+# ---------- PROCESS FUNCTION ----------
+
+def process_job(message):
+    data = json.loads(message.value().decode())
+
+    job_id = data["jobId"]
+    input_key = data["inputKey"]
+    output_key = f"output/{job_id}.wav"
+
     try:
-        print(f"Processing file: {file.filename}")
+        print(f"Processing job {job_id}")
 
-        input_bytes = await file.read()
+        # 🔹 1. Скачать файл из MinIO
+        response = minio_client.get_object(BUCKET, input_key)
+        input_bytes = response.read()
+
+        # 🔹 2. ML обработка
         result_buf = process_single_file(model, input_bytes, device)
-
         result_buf.seek(0)
 
-        return StreamingResponse(
+        # 🔹 3. Загрузить результат в MinIO
+        minio_client.put_object(
+            BUCKET,
+            output_key,
             result_buf,
-            media_type="audio/wav",
-            headers={
-                "Content-Disposition": f"attachment; filename=processed_{file.filename}",
-                "Access-Control-Expose-Headers": "Content-Disposition"
-            }
+            length=-1,
+            part_size=10 * 1024 * 1024,
+            content_type="audio/wav",
         )
 
+        # 🔹 4. Обновить статус Job
+        requests.put(
+            f"{BACKEND_URL}/{job_id}",
+            json={
+                "status": "Completed",
+                "outputKey": output_key
+            },
+            timeout=10
+        )
+
+        # 🔹 5. Отправить Kafka событие
+        producer.produce(
+            OUTPUT_TOPIC_OK,
+            json.dumps({
+                "jobId": job_id,
+                "outputKey": output_key
+            }).encode()
+        )
+        producer.flush()
+
+        print(f"Job {job_id} completed")
+
     except Exception as e:
-        print(f"Processing error: {e}")
-        return {"error": f"Processing failed: {str(e)}"}
+        print(f"Job {job_id} failed: {e}")
+
+        producer.produce(
+            OUTPUT_TOPIC_FAIL,
+            json.dumps({
+                "jobId": job_id,
+                "error": str(e)
+            }).encode()
+        )
+        producer.flush()
+
+
+# ---------- BACKGROUND LOOP ----------
+
+@app.on_event("startup")
+def start_consumer():
+    import threading
+
+    def loop():
+        while True:
+            msg = consumer.poll(1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                print(msg.error())
+                continue
+
+            process_job(msg)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

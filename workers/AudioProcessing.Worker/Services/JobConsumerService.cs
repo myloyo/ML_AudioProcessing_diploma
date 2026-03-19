@@ -1,5 +1,6 @@
-﻿using AudioProcessing.Domain.Entities.Job;
-using AudioProcessing.Infrastructure.Context;
+﻿using AudioProcessing.Domain;
+using AudioProcessing.Domain.Entities.Job;
+using AudioProcessing.Infrastructure.Repositories;
 using AudioProcessing.Infrastructure.Storage;
 using Confluent.Kafka;
 using System.Text.Json;
@@ -49,7 +50,7 @@ public class JobConsumerService : BackgroundService
             {
                 _consumer = new ConsumerBuilder<Null, string>(consumerConfig)
                     .SetErrorHandler((_, e) => _logger.LogError("Kafka error: {Reason}", e.Reason))
-                    .SetLogHandler((_, log) => _logger.LogDebug("Kafka log: {Message}", log.Message))
+                    .SetLogHandler((_, log) => _logger.LogInformation("Kafka log: {Message}", log.Message))
                     .Build();
 
                 _producer = new ProducerBuilder<Null, string>(producerConfig)
@@ -78,14 +79,26 @@ public class JobConsumerService : BackgroundService
         }
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        if (_consumer == null)
+        {
+            _logger.LogError("Consumer is not initialized");
+            return;
+        }
+
+        while (!ct.IsCancellationRequested)
         {
             try
             {
                 // Получаем сообщение из job.created
-                var cr = _consumer.Consume(stoppingToken);
+                var cr = _consumer.Consume(ct);
+                if (cr == null || cr.IsPartitionEOF)
+                {
+                    _logger.LogDebug("End of partition reached, waiting for new messages...");
+                    await Task.Delay(100, ct);
+                    continue;
+                }
 
                 // десереализация сообщения
                 var payload = JsonSerializer.Deserialize<JsonElement>(cr.Message.Value);
@@ -102,11 +115,11 @@ public class JobConsumerService : BackgroundService
                 using var scope = _serviceProvider.CreateScope();
 
                 // получение сервисов
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var jobsRepository = scope.ServiceProvider.GetRequiredService<JobsRepository>();
                 var minio = scope.ServiceProvider.GetRequiredService<MinioService>();
 
                 // обновление статуса задания
-                JobEntity? job = await db.Jobs.FindAsync(jobId, stoppingToken);
+                JobEntity? job = await jobsRepository.Read(jobId, ct);
                 if (job == null)
                 {
                     _logger.LogError("Job {JobId} not found in database", jobId);
@@ -115,33 +128,31 @@ public class JobConsumerService : BackgroundService
                 }
                 job.Status = JobStatus.Running; 
                 job.StartedAt = DateTime.UtcNow;
-                await db.SaveChangesAsync(stoppingToken);
+                await jobsRepository.Update(job, ct);
 
                 // Загрузка входного файла из MinIO в виде потока, без сохранения на диск.
-                using var inStream = await minio.GetObjectStreamAsync(inputKey, stoppingToken);
+                using var inStream = await minio.GetObjectStreamAsync(inputKey, ct);
 
                 //==== ИМИТАЦИЯ ОБРАБОТКИ - ЗАМЕНИТЬ НА ВЫЗОВ ML-SERVICE ====
                 var preparedKey = $"prepared/{jobId}.wav";
                 using var outStream = new MemoryStream();
-                await inStream.CopyToAsync(outStream, stoppingToken); // файл просто копируется
+                await inStream.CopyToAsync(outStream, ct); // файл просто копируется
                 outStream.Position = 0;
                 var preparedMessage = new
                 {
-                    jobId = jobId,
-                    preparedKey = preparedKey,
+                    jobId,
+                    preparedKey,
                     parameters = new
                     {
-                        genre = parameters.GetProperty("genre").GetString(),
-                        instrument = parameters.GetProperty("instrument").GetString()
+                        genre = (MusicGenre)parameters.GetProperty("genre").GetInt32(),
+                        instrument = (MusicInstrument)parameters.GetProperty("instrument").GetInt32()
                     }
                 };
                 var messageJson = JsonSerializer.Serialize(preparedMessage);
-                await _producer.ProduceAsync(_outputTopic,
-                    new Message<Null, string> { Value = messageJson },
-                    stoppingToken);
+                await _producer.ProduceAsync(_outputTopic, new Message<Null, string> { Value = messageJson }, ct);
                 _logger.LogInformation("Worker published job {JobId} to {OutputTopic}", jobId, _outputTopic);
                 job.Status = JobStatus.Success;
-                await db.SaveChangesAsync(stoppingToken);
+                await jobsRepository.Update(job, ct);
                 // =============================================================
 
                 // Подтверждаем исходное сообщение
