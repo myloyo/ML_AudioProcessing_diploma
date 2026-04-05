@@ -14,7 +14,7 @@ public class TracksRepository
 
     public async Task<Guid> Create(TrackEntity trackEntity, CancellationToken ct)
     {
-        if (trackEntity == null || string.IsNullOrEmpty(trackEntity.StorageKey) || string.IsNullOrEmpty(trackEntity.Filename))
+        if (trackEntity == null || string.IsNullOrEmpty(trackEntity.InputKey) || string.IsNullOrEmpty(trackEntity.Filename))
         {
             throw new ArgumentNullException(nameof(trackEntity));
         }
@@ -31,7 +31,7 @@ public class TracksRepository
 
     public async Task Update(TrackEntity trackEntity, CancellationToken ct)
     {
-        if (trackEntity == null || string.IsNullOrEmpty(trackEntity.StorageKey) || string.IsNullOrEmpty(trackEntity.Filename))
+        if (trackEntity == null || string.IsNullOrEmpty(trackEntity.InputKey) || string.IsNullOrEmpty(trackEntity.Filename))
         {
             throw new ArgumentNullException(nameof(trackEntity));
         }
@@ -39,7 +39,7 @@ public class TracksRepository
         var track = await _db.Tracks.FindAsync([trackEntity.TrackId, ct], cancellationToken: ct);
         if (track != null)
         {
-            track = new TrackEntity { TrackId = trackEntity.TrackId, StorageKey = trackEntity.StorageKey, Filename = trackEntity.Filename, CreatedAt = trackEntity.CreatedAt, DeletedAt = trackEntity.DeletedAt };
+            track = new TrackEntity { TrackId = trackEntity.TrackId, InputKey = trackEntity.InputKey, Filename = trackEntity.Filename, CreatedAt = trackEntity.CreatedAt, DeletedAt = trackEntity.DeletedAt };
             await _db.SaveChangesAsync(ct);
         }
     }
