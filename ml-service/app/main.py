@@ -8,7 +8,9 @@ from minio import Minio
 from model import GRUSeparator
 from utils import process_single_file
 
-app = FastAPI(title="ML Audio Processor")
+from confluent_kafka import Consumer
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # ---------- CONFIG ----------
 
