@@ -1,21 +1,36 @@
-import time
-
+import io
 from minio import Minio
+from .config import MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, BUCKET
 
-from .config import (
-    BUCKET,
-    DOWNLOAD_RETRY_ATTEMPTS,
-    DOWNLOAD_RETRY_DELAY,
-    MINIO_ACCESS_KEY,
-    MINIO_ENDPOINT,
-    MINIO_SECRET_KEY,
-    UPLOAD_RETRY_ATTEMPTS,
-    UPLOAD_RETRY_DELAY,
-)
+
+# Маппинг расширений файлов в MIME-типы
+AUDIO_MIME_TYPES = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4",
+    ".aiff": "audio/aiff",
+    ".aac": "audio/aac",
+    ".wma": "audio/x-ms-wma",
+}
+
+
+def get_content_type(filename: str) -> str:
+    """
+    Определяет MIME-тип по расширению файла.
+    
+    Args:
+        filename: Имя файла (например, "audio.wav")
+    
+    Returns:
+        MIME-тип (например, "audio/wav")
+    """
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return AUDIO_MIME_TYPES.get(ext, "audio/wav")
 
 
 def get_minio_client() -> Minio:
-    """Create and return MinIO client instance"""
     return Minio(
         MINIO_ENDPOINT,
         access_key=MINIO_ACCESS_KEY,
@@ -25,73 +40,33 @@ def get_minio_client() -> Minio:
 
 
 def download_file(key: str) -> bytes:
-    """Download file from MinIO with retry logic
+    client = get_minio_client()
+    response = client.get_object(BUCKET, key)
+    data = response.read()
+    response.close()
+    return data
 
-    Args:
-    ----
-        key: Object key to download
 
-    Returns:
-    -------
-        File content as bytes
-
-    Raises:
-    ------
-        Exception: If download fails after all retries
-
+def upload_file(key: str, file_stream, file_size: int, content_type: str = None):
     """
-    last_error = None
-
-    for attempt in range(DOWNLOAD_RETRY_ATTEMPTS):
-        try:
-            client = get_minio_client()
-            response = client.get_object(BUCKET, key)
-            data = response.read()
-            response.close()
-            print(f"[MinIO] Downloaded {key} (attempt {attempt + 1})")
-            return data
-        except Exception as e:
-            last_error = e
-            print(f"[MinIO] Download attempt {attempt + 1}/{DOWNLOAD_RETRY_ATTEMPTS} failed for {key}: {e}")
-            if attempt < DOWNLOAD_RETRY_ATTEMPTS - 1:
-                time.sleep(DOWNLOAD_RETRY_DELAY)
-
-    raise Exception(f"Failed to download {key} after {DOWNLOAD_RETRY_ATTEMPTS} attempts: {last_error}")
-
-
-def upload_file(key: str, file_stream, file_size: int) -> None:
-    """Upload file to MinIO with retry logic
-
+    Загружает файл в MinIO.
+    
     Args:
-    ----
-        key: Object key for upload
-        file_stream: File stream to upload
-        file_size: Size of file in bytes
-
-    Raises:
-    ------
-        Exception: If upload fails after all retries
-
+        key: Ключ (путь) в бакете
+        file_stream: Поток с данными файла
+        file_size: Размер файла в байтах
+        content_type: MIME-тип файла (определяется автоматически если не указан)
     """
-    last_error = None
-
-    for attempt in range(UPLOAD_RETRY_ATTEMPTS):
-        try:
-            client = get_minio_client()
-            file_stream.seek(0)
-            client.put_object(
-                BUCKET,
-                key,
-                file_stream,
-                length=file_size,
-                content_type="audio/wav",
-            )
-            print(f"[MinIO] Uploaded {key} (attempt {attempt + 1})")
-            return
-        except Exception as e:
-            last_error = e
-            print(f"[MinIO] Upload attempt {attempt + 1}/{UPLOAD_RETRY_ATTEMPTS} failed for {key}: {e}")
-            if attempt < UPLOAD_RETRY_ATTEMPTS - 1:
-                time.sleep(UPLOAD_RETRY_DELAY)
-
-    raise Exception(f"Failed to upload {key} after {UPLOAD_RETRY_ATTEMPTS} attempts: {last_error}")
+    client = get_minio_client()
+    
+    # Если content_type не указан, пытаемся определить по ключу
+    if content_type is None:
+        content_type = get_content_type(key)
+    
+    client.put_object(
+        BUCKET,
+        key,
+        file_stream,
+        length=file_size,
+        content_type=content_type,
+    )

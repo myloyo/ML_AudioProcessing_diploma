@@ -1,22 +1,54 @@
+# Git
 .git
 .gitignore
-.venv
-venv
+
+# Python
 __pycache__
-*.pyc
-*.pyo
-*.egg-info
-.pytest_cache
-.coverage
-htmlcov
-.DS_Store
-*.log
-poetry.lock
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
 .env
-.env.local
-README.md
-IMPROVEMENTS.md
-EXAMPLES.md
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Build artifacts
+*.egg
+build/
+dist/
+
+# Data files (not needed in container)
+data/
+*.wav
+*.mp3
+*.flac
+
+# Scripts and notebooks
+script.py
+test.sh
+*.ipynb
+
+# Documentation
 *.md
-.idea
-.vscode
+!requirements.txt
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log

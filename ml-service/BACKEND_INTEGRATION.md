@@ -1,279 +1,103 @@
 ## Backend Integration
 
-### ML Service Capabilities
+### Что Backend должен делать
 
-ML-сервис поддерживает обработку аудио с параметрами и отправляет результаты обратно в Backend.
+1. **POST /upload** - получить файл, загрузить в MinIO, создать Job в БД, отправить в Kafka
+2. **PUT /api/jobs/{id}** - ML Service будет вызывать после обработки
+3. **Kafka Consumer** - слушать job.completed и job.failed, обновлять Job в БД
+4. **GET /api/jobs/{id}/download** - скачать файл из MinIO
 
-### Message Flow
+### Job Model
 
-```
-Backend → Kafka (job.prepared or audio-jobs)
-           ↓
-ML Service:
-  - Скачивает файл из MinIO
-  - Обрабатывает с учетом параметров (Genre, Instrument)
-  - Загружает результат в MinIO
-  - Обновляет Backend через PUT API
-  - Публикует результат в Kafka (job.completed/job.failed)
-           ↓
-Backend ← Kafka
-```
-
-### 1. Input Topics
-
-ML-сервис слушает оба topic'а:
-
-- **Primary**: `job.prepared` (по спецификации)
-- **Alternative**: `audio-jobs` (текущий topic от Backend)
-
-Это обеспечивает совместимость.
-
-### 2. Input Message Format
-
-Backend отправляет в Kafka:
-
-```json
+```csharp
+public class Job
 {
-  "jobId": "550e8400-e29b-41d4-a716-446655440000",
-  "inputKey": "input/550e8400-e29b-41d4-a716-446655440000.wav",
-  "outputKey": "results/550e8400-e29b-41d4-a716-446655440000_filename.wav",
-  "parameters": {
-    "Genre": "Classic",
-    "Instrument": "Guitar"
-  }
+    public Guid Id { get; set; }
+    public string Status { get; set; }        // Queued, Completed, Failed
+    public string InputKey { get; set; }      // input/job-xxx.wav
+    public string OutputKey { get; set; }     // output/job-xxx.wav (nullable)
+    public string ErrorMessage { get; set; }  // error msg (nullable)
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
 }
 ```
 
-**Обязательные поля**:
+### 1. Upload Endpoint
 
-- `jobId` (string UUID)
-- `inputKey` (string S3/MinIO path)
-
-**Опциональные поля**:
-
-- `outputKey` (string) - Игнорируется ML-сервисом, генерирует свой: `output/{jobId}.wav`
-- `parameters` (object):
-  - `Genre` (string): Classic, Jazz, Rock (case-insensitive)
-  - `Instrument` (string): Guitar, Piano, Vocal (case-insensitive)
-
-### 3. ML Service Processing
-
-#### Параме распознавание
-
-- Жанры: Classic, Jazz, Rock (и case-insensitive варианты)
-- Инструменты: Guitar, Piano, Vocal
-
-#### Применяемые эффекты
-
-**Жанры**:
-
-- Classic: Усиление среднего диапазона (500-4000Hz)
-- Jazz: Мягкое сжатие и легкий boost
-- Rock: Усиление высоких частот (>3000Hz) + дополнительная громкость
-
-**Инструменты**:
-
-- Guitar: Усиление среднего диапазона (300-3000Hz)
-- Piano: Сохранение динамики, чистые высокие частоты
-- Vocal: Усиление диапазона присутствия (2-4kHz)
-
-#### Output
-
-- **Успешно**: Файл загружается в `output/{jobId}.wav`
-- **Ошибка**: Backend получит сообщение об ошибке
-
-### 4. Update Backend Endpoint
-
-ML-сервис обновляет Backend через PUT запрос:
-
-```
-PUT /api/jobs/{jobId}
-```
-
-**Request body**:
-
-```json
+```csharp
+[HttpPost("upload")]
+public async Task<IActionResult> UploadAsync(IFormFile file)
 {
-  "status": "Completed",
-  "outputKey": "output/550e8400-e29b-41d4-a716-446655440000.wav"
+    var jobId = Guid.NewGuid();
+    var inputKey = $"input/job-{jobId}.wav";
+
+    // Upload to MinIO
+    using (FileStream fs = System.IO.File.OpenRead(file.FileName))
+    {
+        await minioClient.PutObjectAsync(new PutObjectArgs()
+            .WithBucket("audio-files")
+            .WithObject(inputKey)
+            .WithStreamData(fs)
+            .WithObjectSize(fs.Length)
+            .WithContentType("audio/wav"));
+    }
+
+    // Create Job
+    var job = new Job
+    {
+        Id = jobId,
+        Status = "Queued",
+        InputKey = inputKey,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+    _context.Jobs.Add(job);
+    await _context.SaveChangesAsync();
+
+    // Send to Kafka
+    await kafkaProducer.ProduceAsync("job.prepared",
+        new Message<string, string>
+        {
+            Key = jobId.ToString(),
+            Value = JsonSerializer.Serialize(new { jobId, inputKey })
+        });
+
+    return Ok(job);
 }
 ```
 
-или при ошибке:
+### 2. Update Job Endpoint
 
-```json
+ML Service вызывает это после обработки:
+
+```csharp
+[HttpPut("{id:guid}")]
+public async Task<IActionResult> UpdateJobAsync(Guid id, UpdateJobRequest req)
 {
-  "status": "Failed",
-  "errorMessage": "Failed to download input file: connection timeout"
+    var job = await _context.Jobs.FindAsync(id);
+    if (job == null) return NotFound();
+
+    job.Status = req.Status;
+    if (req.OutputKey != null) job.OutputKey = req.OutputKey;
+    if (req.ErrorMessage != null) job.ErrorMessage = req.ErrorMessage;
+    job.FinishedAt = DateTime.UtcNow;
+    job.UpdatedAt = DateTime.UtcNow;
+
+    await _context.SaveChangesAsync();
+    return Ok(job);
+}
+
+public class UpdateJobRequest
+{
+    public string Status { get; set; }
+    public string OutputKey { get; set; }
+    public string ErrorMessage { get; set; }
 }
 ```
 
-**Параметры**:
-
-- `status` (string): "Completed", "Failed"
-- `outputKey` (string, optional): S3/MinIO path к обработанному файлу
-- `errorMessage` (string, optional): Сообщение об ошибке
-
-**Retry логика**:
-
-- До 3 попыток обновления Backend
-- Задержка между попытками: 1 секунда
-
-### 5. Output Topics
-
-ML-сервис публикует результаты в Kafka:
-
-#### Success: `job.completed`
-
-```json
-{
-  "jobId": "550e8400-e29b-41d4-a716-446655440000",
-  "outputKey": "output/550e8400-e29b-41d4-a716-446655440000.wav"
-}
-```
-
-#### Failure: `job.failed`
-
-```json
-{
-  "jobId": "550e8400-e29b-41d4-a716-446655440000",
-  "error": "Failed to download input file: connection timeout"
-}
-```
-
-### 6. Backend Requirements
-
-Для полной интеграции Backend должен:
-
-1. **Отправлять в Kafka** сообщения с:
-   - jobId и inputKey (обязательно)
-   - Параметры Genre/Instrument (опционально)
-
-2. **Иметь PUT endpoint** `/api/jobs/{jobId}` для обновления статуса
-
-3. **Слушать Kafka topics** (опционально, но рекомендуется):
-   - job.completed
-   - job.failed
-
-4. **Хранить файлы в MinIO** с правильных путям:
-   - Input: `input/{jobId}.wav`
-   - Output будет в: `output/{jobId}.wav`
-
-### 7. Конфигурация ML-сервиса
-
-Переменные окружения для настройки интеграции:
-
-```bash
-# Kafka
-KAFKA_BOOTSTRAP=kafka:9092
-INPUT_TOPIC=job.prepared
-ALT_INPUT_TOPIC=audio-jobs
-OUTPUT_TOPIC_OK=job.completed
-OUTPUT_TOPIC_FAIL=job.failed
-
-# Backend
-BACKEND_URL=http://backend:8080/api/jobs
-BACKEND_TIMEOUT=10
-BACKEND_MAX_RETRIES=3
-
-# MinIO
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minio
-MINIO_SECRET_KEY=minio123
-BUCKET=audio-files
-
-# Processing
-ENABLE_PARAMETER_PROCESSING=true
-DOWNLOAD_RETRY_ATTEMPTS=3
-DOWNLOAD_RETRY_DELAY=2
-UPLOAD_RETRY_ATTEMPTS=3
-UPLOAD_RETRY_DELAY=2
-```
-
-### 8. Health Checks
-
-Backend может проверять статус ML-сервиса:
-
-```bash
-GET /health
-Response: {"status": "ok", "service": "ML Audio Processor"}
-
-GET /health/detailed
-Response: Детальная информация о зависимостях (Kafka, MinIO)
-
-GET /info
-Response: Информация о сервисе и компонентах
-```
-
-### 9. Пример workflow
-
-```bash
-# 1. Backend загружает файл в MinIO
-PUT /api/minIO/input/job-123.wav
-
-# 2. Backend создает Job в БД
-POST /api/jobs
-Response: {jobId: "job-123", ...}
-
-# 3. Backend отправляет сообщение в Kafka
-{
-  "jobId": "job-123",
-  "inputKey": "input/job-123.wav",
-  "parameters": {
-    "Genre": "Jazz",
-    "Instrument": "Piano"
-  }
-}
-
-# 4. ML-сервис получает сообщение и обрабатывает:
-# - Скачивает input/job-123.wav
-# - Применяет Jazz+Piano эффекты
-# - Загружает output/job-123.wav
-
-# 5. ML-сервис обновляет Backend:
-PUT /api/jobs/job-123
-{
-  "status": "Completed",
-  "outputKey": "output/job-123.wav"
-}
-
-# 6. ML-сервис публикует результат:
-Kafka: job.completed
-{
-  "jobId": "job-123",
-  "outputKey": "output/job-123.wav"
-}
-
-# 7. Frontend скачивает результат:
-GET /api/jobs/job-123/download
-```
-
-### 10. Error Handling
-
-ML-сервис обрабатывает ошибки:
-
-- **MinIO ошибки**: Retry с экспоненциальной задержкой
-- **Обработка аудио**: Отправляет ошибку в errorMessage
-- **Backend недоступен**: Логирует, но продолжает работать
-- **Kafka ошибки**: Reconn попытки с экспоненциальной задержкой
-
-Все ошибки логируются детально для отладки.
-
-### 11. Monitoring & Debugging
-
-```bash
-# Проверить логи ML-сервиса
-docker logs audio_ml_service
-
-# Проверить статус
-curl http://localhost:8000/health/detailed
-
-# Проверить Kafka messages
-docker exec kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic job.completed
-
-# Проверить MinIO files
-docker exec minio s3cmd ls s3://audio-files/
-```
+### 3. Kafka Consumer
 
 ```csharp
 public class KafkaConsumerService : BackgroundService
