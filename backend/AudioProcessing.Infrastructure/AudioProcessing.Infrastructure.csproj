@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\AudioProcessing.Application\AudioProcessing.Application.csproj" />
     <ProjectReference Include="..\AudioProcessing.Domain\AudioProcessing.Domain.csproj" />
   </ItemGroup>
 

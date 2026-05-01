@@ -83,7 +83,7 @@ public class JobConsumerService : BackgroundService
     {
         if (_consumer == null)
         {
-            _logger.LogError("Consumer is not initialized");
+            _logger.LogError("Consumer не инициализирован");
             return;
         }
 
@@ -95,7 +95,7 @@ public class JobConsumerService : BackgroundService
                 var cr = _consumer.Consume(ct);
                 if (cr == null || cr.IsPartitionEOF)
                 {
-                    _logger.LogDebug("End of partition reached, waiting for new messages...");
+                    _logger.LogDebug("Достигнут конец партиции, в ожидании новых сообщений...");
                     await Task.Delay(100, ct);
                     continue;
                 }
@@ -107,7 +107,7 @@ public class JobConsumerService : BackgroundService
                 var outputKey = payload.GetProperty("outputKey").GetString();
                 var parameters = payload.GetProperty("parameters");
 
-                _logger.LogInformation("Worker received job {JobId} from {InputTopic}", jobId, _inputTopic);
+                _logger.LogInformation("Worker получил job {JobId} из топика {InputTopic}", jobId, _inputTopic);
 
                 // новый DI-scope на каждую задачу для
                 // DbContext корректно создавался и уничтожался
@@ -122,7 +122,7 @@ public class JobConsumerService : BackgroundService
                 JobEntity? job = await jobsRepository.Read(jobId, ct);
                 if (job == null)
                 {
-                    _logger.LogError("Job {JobId} not found in database", jobId);
+                    _logger.LogError("Job {JobId} не была найдена в базе данных", jobId);
                     _consumer.Commit(cr);
                     continue;
                 }
@@ -136,8 +136,8 @@ public class JobConsumerService : BackgroundService
                     outputKey,
                     parameters = new
                     {
-                        genre = (MusicGenre)parameters.GetProperty("genre").GetInt32(),
-                        instrument = (MusicInstrument)parameters.GetProperty("instrument").GetInt32()
+                        genre = Enum.Parse<MusicGenre>(parameters.GetProperty("genre").GetString()),
+                        instrument = Enum.Parse<MusicInstrument>(parameters.GetProperty("instrument").GetString())
                     }
                 };
                 var messageJson = JsonSerializer.Serialize(preparedMessage);
@@ -147,11 +147,11 @@ public class JobConsumerService : BackgroundService
             }
             catch (ConsumeException ex)
             {
-                _logger.LogError(ex, "Error processing job");
+                _logger.LogError(ex, "Ошибка обработки job: ConsumeException");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing job");
+                _logger.LogError(ex, "Ошибка обработки job: Exception");
             }
         }
     }

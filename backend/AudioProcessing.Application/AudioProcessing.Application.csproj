@@ -1,13 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\AudioProcessing.Domain\AudioProcessing.Domain.csproj" />
+    <Compile Remove="Audio\**" />
+    <EmbeddedResource Remove="Audio\**" />
+    <None Remove="Audio\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Audio\Commands\" />
-    <Folder Include="Audio\Handlers\" />
-    <Folder Include="Audio\Responses\" />
+    <ProjectReference Include="..\AudioProcessing.Domain\AudioProcessing.Domain.csproj" />
+    <ProjectReference Include="..\AudioProcessing.Infrastructure\AudioProcessing.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="14.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Features" Version="5.0.17" />
   </ItemGroup>
 
   <PropertyGroup>

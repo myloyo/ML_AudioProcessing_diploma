@@ -46,7 +46,7 @@
             // try to fetch the file as blob first (helps detect HTTP errors / content-type)
             const res = await fetch(url)
             if (!res.ok) {
-                console.error('Audio fetch failed', res.status, res.statusText)
+                console.error('Ошибка получения аудиофайла', res.status, res.statusText)
                 // fallback: set URL directly (may still fail)
                 a.src = url
                 try { a.load() } catch { }
@@ -55,7 +55,7 @@
 
             const ct = res.headers.get('content-type') || ''
             if (!ct.startsWith('audio/')) {
-                console.warn('Audio content-type is not audio/*:', ct)
+                console.warn('Тип контента аудио не соответствует audio/*:', ct)
                 // still try to use as blob
             }
 
@@ -68,7 +68,7 @@
             a.src = objectUrl
             try { a.load() } catch { }
         } catch (err) {
-            console.error('Failed to fetch audio resource, falling back to direct src', err)
+            console.error('Не удалось получить аудиоресурс, используем прямой URL', err)
             a.src = url
             try { a.load() } catch { }
         }
@@ -81,7 +81,7 @@
         if (!a.src) {
             const src = audioUrl()
             if (!src) {
-                console.warn('No audio source for track', props.track.id)
+                console.warn('Нет аудиоресурса для трека', props.track.id)
                 return
             }
             await fetchAndSetSource(a, src)
@@ -93,8 +93,8 @@
             try {
                 await a.play()
             } catch (err) {
-                console.error('PLAY ERROR:', err)
-                console.error('If NotSupportedError appears, check network tab: is server returning 200 and Content-Type audio/*? If you see HTML or 404, adjust backend. Also check CORS headers.')
+                console.error('Ошибка воспроизведения:', err)
+                console.error('Если появляется NotSupportedError, проверьте вкладку сети: возвращает ли сервер 200 и Content-Type audio/*? Если вы видите HTML или 404, настройте backend. Также проверьте заголовки CORS.')
             }
         }
     }
@@ -161,7 +161,7 @@
                 setTimeout(() => URL.revokeObjectURL(blobUrl), 2000)
             })
             .catch((err) => {
-                console.error('Download failed:', err)
+                console.error('Не удалось скачать трек:', err)
                 // fallback: open direct url
                 const link = document.createElement('a')
                 link.href = url
@@ -190,7 +190,7 @@
         const src = audioUrl()
         if (src) {
             // don't await
-            fetchAndSetSource(a, src).catch((e) => console.warn('prefetch failed', e))
+            fetchAndSetSource(a, src).catch((e) => console.warn('Не удалось предварительно загрузить аудиофайл', e))
         }
     })
 
@@ -211,7 +211,7 @@
         if (!a) return
         const src = audioUrl()
         if (src) {
-            fetchAndSetSource(a, src).catch((e) => console.warn('watch prefetch failed', e))
+            fetchAndSetSource(a, src).catch((e) => console.warn('Не удалось предварительно загрузить аудиофайл при наблюдении за изменением ключа', e))
         }
     })
 </script>
