@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Minio;
 using Minio.DataModel.Args;
 
@@ -8,12 +9,14 @@ public class MinioService
 {
     private readonly IMinioClient _client;
     private readonly string _bucket;
+    private ILogger<MinioService> _logger;
 
-    public MinioService(IMinioClient client, IOptions<MinioSettings> settings)
+    public MinioService(IMinioClient client, IOptions<MinioSettings> settings, ILogger<MinioService> logger)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         var s = settings?.Value ?? throw new ArgumentNullException(nameof(settings));
         _bucket = string.IsNullOrWhiteSpace(s.Bucket) ? "audio" : s.Bucket;
+        _logger = logger;
     }
 
     public async Task EnsureBucketExistsAsync(CancellationToken ct)
@@ -27,7 +30,7 @@ public class MinioService
         catch (Exception ex)
         {
             // логируем, но не пробрасываем дальше — инициализация может быть отложена
-            Console.WriteLine($"Minio EnsureBucketExistsAsync failed: {ex.Message}");
+            _logger.LogWarning("Minio EnsureBucketExistsAsync failed: {message}", ex.Message);
             throw;
         }
     }

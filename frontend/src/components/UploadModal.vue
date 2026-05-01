@@ -66,11 +66,11 @@
             })
 
             if (!uploadResponse.ok) {
-                throw new Error(`Upload failed with status ${uploadResponse.status}`)
+                throw new Error(`Ошибка загрузки со статусом: ${uploadResponse.status}`)
             }
 
             const uploadResult = await uploadResponse.json()
-            console.log('File uploaded:', uploadResult)
+            console.log('Файл загружен:', uploadResult)
 
             // 2. Create track in DB
             const track = await createTrack({
@@ -79,7 +79,7 @@
                 outputKey: uploadResult.outputKey,
             })
 
-            console.log('Track saved in DB:', track)
+            console.log('Трек сохранен в базу данных:', track)
 
             // 3. Subscribe to SignalR
             await ensureSignalRStarted()
@@ -113,11 +113,11 @@
                 instrument: instrumentEnumMap[instrument.value],
             })
 
-            console.log('Process started:', processResult)
+            console.log('Процесс запущен:', processResult)
             projectStore.closeUploadModal()
         } catch (error) {
-            console.error('Error:', error)
-            errorMessage.value = error instanceof Error ? error.message : 'Unknown error'
+            console.error('Ошибка:', error)
+            errorMessage.value = error instanceof Error ? error.message : 'Неизвестная ошибка'
             loading.value = false
         }
     }

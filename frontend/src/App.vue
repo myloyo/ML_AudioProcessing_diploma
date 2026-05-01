@@ -36,13 +36,13 @@
         await ensureSignalRStarted()
 
         connection.on('JobFinished', (msg) => {
-            console.log('Job finished event:', msg)
+            console.log('Обработка Job завершена успешно:', msg)
             projectStore.moveTrackToProcessed(projectStore.activeProjectId!, msg)
             projectStore.closeProcessingModal()
         })
 
         connection.on('JobFailed', (msg) => {
-            console.log('Job failed event:', msg)
+            console.log('Ошибка! Обработка Job завершилась ошибкой:', msg)
             projectStore.setTrackError(projectStore.activeProjectId!, msg)
             projectStore.closeProcessingModal()
         })

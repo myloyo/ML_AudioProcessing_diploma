@@ -27,7 +27,7 @@ public class JobsRepository
 
     public async Task<JobEntity?> Read(Guid id, CancellationToken ct)
     {
-        return await _db.Jobs.FindAsync([id, ct], cancellationToken: ct);
+        return await _db.Jobs.FindAsync([id], ct);
     }
 
     public async Task Update(JobEntity jobEntity, CancellationToken ct)
@@ -37,17 +37,29 @@ public class JobsRepository
             throw new ArgumentNullException(nameof(jobEntity));
         }
 
-        var job = await _db.Jobs.FindAsync([jobEntity.JobId, ct], cancellationToken: ct);
-        job = new JobEntity { JobId = jobEntity.JobId, TrackId = jobEntity.TrackId, Status = jobEntity.Status, InputKey = jobEntity.InputKey, OutputKey = jobEntity.OutputKey, CreatedAt = jobEntity.CreatedAt, StartedAt = jobEntity.StartedAt, FinishedAt = jobEntity.FinishedAt };
-        await _db.SaveChangesAsync(ct);
+        var job = await _db.Jobs.FindAsync([jobEntity.JobId], ct);
+        if (job != null)
+        {
+            job.JobId = jobEntity.JobId;
+            job.TrackId = jobEntity.TrackId;
+            job.Status = jobEntity.Status;
+            job.InputKey = jobEntity.InputKey;
+            job.OutputKey = jobEntity.OutputKey;
+            job.CreatedAt = jobEntity.CreatedAt;
+            job.StartedAt = jobEntity.StartedAt;
+            job.FinishedAt = jobEntity.FinishedAt;
+
+            await _db.SaveChangesAsync(ct);
+        }
     }
 
     public async Task Delete(Guid id, CancellationToken ct)
     {
-        var job = await _db.Jobs.FindAsync([id, ct], cancellationToken: ct);
+        var job = await _db.Jobs.FindAsync([id], ct);
         if (job != null)
         {
             _db.Jobs.Remove(job);
+            await _db.SaveChangesAsync(ct);
         }
     }
 }
