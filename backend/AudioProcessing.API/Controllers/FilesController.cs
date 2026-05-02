@@ -1,105 +1,63 @@
 using AudioProcessing.Domain.DTOs.FileUpload;
-using AudioProcessing.Infrastructure.Storage;
+using AudioProcessing.Application.Files.CreatePresignedUrl;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using AudioProcessing.Application.Files.UploadFile;
+using AudioProcessing.Application.Files.DownloadFile;
 
 namespace AudioProcessing.API.Controllers;
 
+/// <summary>
+/// Контроллер для работы с файлами, предоставляющий конечные точки для получения presigned URL для загрузки в MinIO, загрузки файлов и скачивания файлов.
+/// </summary>
+/// <param name="mediator">Экземпляр посредника MediatR</param>
 [ApiController]
 [Route("api/files")]
-public class FilesController(MinioService minio, ILogger<FilesController> logger) : ControllerBase
+public class FilesController(IMediator mediator) : ControllerBase
 {
-    private readonly MinioService _minio = minio;
-    private readonly ILogger<FilesController> _logger = logger;
     private const string _inputPath = "input";
     private const string _outputPath = "output";
 
     /// <summary>
     /// Метод выдаёт presigned URL для загрузки в MinIO
     /// </summary>
-    /// <param name="request"></param>
-    /// <returns></returns>
+    /// <param name="request">Объект запроса, содержащий имя файла для загрузки</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Объект <see cref="IActionResult"/>, содержащий presigned URL для загрузки файла</returns>
     [HttpPost("presigned-upload")]
-    public IActionResult GetPresignedUrl([FromBody] FileUploadRequest request)
+    public async Task<IActionResult> GetPresignedUrl([FromBody] FileUploadRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("FilesController поступил POST запрос для файла {request}", request.Filename);
-        if (string.IsNullOrEmpty(request.Filename))
-        {
-            _logger.LogInformation("FilesController ошибка 400 для файла {request}", request.Filename);
-            return BadRequest(new { message = "Error! Filename is required" });
-        }
-
-        try
-        {
-            var trackGuid = Guid.NewGuid();
-            string inputKey = $"{_inputPath}/{trackGuid}_{request.Filename}";
-            string outputKey = $"{_outputPath}/{trackGuid}_{request.Filename}";
-            string url = _minio.PresignedPutObject(inputKey, 3600);
-
-            _logger.LogInformation("FilesController место для файла {request} выделено", request.Filename);
-            return Ok(new
-            {
-                uploadUrl = url,
-                inputKey,
-                outputKey
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogInformation("FilesController ошибка 500 для файла {request}", request.Filename);
-            return StatusCode(500, ex.Message);
-        }
+        return Ok(await mediator.Send(new CreatePresignedUrlCommand(request.Filename, _inputPath, _outputPath), cancellationToken));
     }
 
+    /// <summary>
+    /// Обрабатывает запросы на загрузку файла, принимая файл от клиента и инициируя процесс загрузки
+    /// асинхронно.
+    /// </summary>
+    /// <remarks>Файл обрабатывается асинхронно. Максимально допустимый размер файла и поддерживаемые типы файлов
+    /// могут ограничиваться конфигурацией сервера.</remarks>
+    /// <param name="file">Файл для загрузки, передаваемый как данные формы. Не может быть null.</param>
+    /// <param name="cancellationToken">Токен для отслеживания запросов на отмену. Передача отменённого токена попытается отменить операцию.</param>
+    /// <returns>IActionResult, указывающий на результат операции загрузки. Возвращает 200 OK, если загрузка прошла успешно.</returns>
     [HttpPost("upload")]
-    public async Task<IActionResult> UploadFile([FromForm] IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> UploadFile([FromForm] IFormFile file, CancellationToken cancellationToken)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest(new { message = "No file uploaded" });
-
-        var trackGuid = Guid.NewGuid();
-        string inputKey = $"input/{trackGuid}_{file.FileName}";
-        string outputKey = $"output/{trackGuid}_{file.FileName}";
-
-        try
-        {
-            using var stream = file.OpenReadStream();
-            await _minio.UploadObjectAsync(inputKey, stream, file.ContentType, ct);
-
-            _logger.LogInformation("File {Filename} uploaded to MinIO at {Key}", file.FileName, inputKey);
-
-            return Ok(new
-            {
-                inputKey,
-                outputKey
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error uploading file {Filename}", file.FileName);
-            return StatusCode(500, new { message = ex.Message });
-        }
+        return Ok(await mediator.Send(new UploadFileCommand(file), cancellationToken));
     }
 
+    /// <summary>
+    /// Инициирует скачивание файла по указанному ключу объекта.
+    /// </summary>
+    /// <remarks>Ответ включает соответствующий тип содержимого и имя файла для скачиваемого файла.
+    /// Эта конечная точка обычно используется, чтобы позволить клиентам получать файлы по их ключу объекта.</remarks>
+    /// <param name="objectKey">Уникальный идентификатор файла для скачивания. Не может быть null или пустым.</param>
+    /// <param name="cancellationToken">Токен для отслеживания запросов на отмену.</param>
+    /// <returns>IActionResult, который при выполнении возвращает содержимое файла в виде ответа для скачивания. Возвращает
+    /// результат 404 Not Found, если файл не существует.</returns>
     [HttpGet("download")]
-    public async Task<IActionResult> DownloadFile([FromQuery] string objectKey, CancellationToken ct)
+    public async Task<IActionResult> DownloadFile([FromQuery] string objectKey, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(objectKey))
-            return BadRequest("objectKey is required");
-
-        try
-        {
-            var stream = await _minio.GetObjectStreamAsync(objectKey, ct);
-
-            var fileName = Path.GetFileName(objectKey);
-
-            _logger.LogInformation("Downloading file {objectKey} from MinIO", objectKey);
-
-            return File(stream, "audio/wav", fileName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error downloading file {objectKey}", objectKey);
-            return NotFound();
-        }
+        var result = await mediator.Send(new DownloadFileQuery(objectKey), cancellationToken);
+        return File(result.Stream, result.ContentType, result.Filename);
     }
 }

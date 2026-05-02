@@ -1,4 +1,5 @@
 using AudioProcessing.API.Services;
+using AudioProcessing.Application;
 using AudioProcessing.Infrastructure.Context;
 using AudioProcessing.Infrastructure.Repositories;
 using AudioProcessing.Infrastructure.Storage;
@@ -52,8 +53,6 @@ builder.Services.AddSingleton(sp =>
     if (string.IsNullOrWhiteSpace(minioSettings.Endpoint))
         throw new InvalidOperationException("Minio:Endpoint is not configured. Set Minio:Endpoint in environment or appsettings.");
 
-    Console.WriteLine($"{minioSettings.ToString()}");
-
     // Создаём клиент (Minio .NET API)
     var builderClient = new MinioClient()
         .WithEndpoint(minioSettings.Endpoint)
@@ -80,6 +79,11 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSignalR();
+
+builder.Services.AddMediatR(cfg => 
+{
+    cfg.RegisterServicesFromAssembly(typeof(AssemblyMarker).Assembly);
+});
 
 // Hosted services, healthchecks, etc.
 builder.Services.AddHealthChecks();
