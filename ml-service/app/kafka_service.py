@@ -10,8 +10,8 @@ from .config import (
     BACKEND_URL,
     BACKEND_TIMEOUT,
 )
-from .minio_service import download_file, upload_file, get_content_type
-from .model_service_unet import process_audio_file_improved
+from .minio_service import download_file, upload_file
+from .model_manager import get_model_manager
 
 
 def get_kafka_consumer():
@@ -66,18 +66,31 @@ def update_backend_job(job_id: str, status: str, output_key: str = None, error_m
         print(f"[Backend] Error updating job {job_id}: {e}")
 
 
+# Маппинг enum значений инструментов (backend отправляет число: 1=keys, 2=bass)
+INSTRUMENT_MAP = {
+    1: "keys",
+    2: "bass",
+    "keys": "keys",
+    "bass": "bass"
+}
+
+
 def process_job(message):
     data = json.loads(message.value().decode())
     job_id = data["jobId"]
     input_key = data["inputKey"]
+    output_key = data["outputKey"]  # Используем outputKey из сообщения
     
-    # Получаем instrumentId и genreId из сообщения
-    instrument_id = data.get("instrumentId", "keys")
-    genre_id = data.get("genreId", "default")
+    # Получаем instrument и genre из parameters
+    parameters = data.get("parameters", {})
+    raw_instrument = parameters.get("instrument", 1)
+    
+    # Маппим enum в строку
+    instrument_id = INSTRUMENT_MAP.get(raw_instrument, "keys")
+    genre_id = parameters.get("genre", "default")
     
     # Определяем формат выходного файла по входному
     output_ext = input_key.rsplit(".", 1)[-1] if "." in input_key else "wav"
-    output_key = f"output/{instrument_id}/{genre_id}/{job_id}.{output_ext}"
     
     try:
         print(f"[Job] Processing job {job_id}")
@@ -89,8 +102,10 @@ def process_job(message):
         input_bytes = download_file(input_key)
         print(f"[Download] Downloaded {len(input_bytes)} bytes")
         
-        print("[ML] Processing with Improved UNet model (keys)")
-        result_buf = process_audio_file_improved(input_bytes, output_format=output_ext.upper())
+        # Используем ModelManager для выбора обработчика по инструменту
+        manager = get_model_manager()
+        print(f"[ML] Processing with '{instrument_id}' model")
+        result_buf = manager.process_audio(instrument_id, input_bytes, output_format=output_ext.upper())
         result_buf.seek(0)
         result_bytes = result_buf.getvalue()
         print(f"[ML] Processing completed, output size: {len(result_bytes)} bytes")
@@ -106,6 +121,8 @@ def process_job(message):
         
     except Exception as e:
         print(f"[Error] Job {job_id} failed: {e}")
+        import traceback
+        traceback.print_exc()
         update_backend_job(job_id, "Failed", error_msg=str(e))
         publish_result(job_id, None, success=False, error_msg=str(e))
 

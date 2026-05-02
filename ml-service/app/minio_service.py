@@ -1,9 +1,7 @@
-import io
 from minio import Minio
 from .config import MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, BUCKET
 
 
-# Маппинг расширений файлов в MIME-типы
 AUDIO_MIME_TYPES = {
     ".wav": "audio/wav",
     ".mp3": "audio/mpeg",
